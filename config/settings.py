@@ -24,11 +24,12 @@ class Settings(BaseSettings):
     lightrag_api_key: str = Field(..., env="LIGHTRAG_API_KEY")
     lightrag_timeout: int = Field(default=30, env="LIGHTRAG_TIMEOUT")
     
-    # OpenAI Configuration
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4-vision-preview", env="OPENAI_MODEL")
-    openai_timeout: int = Field(default=60, env="OPENAI_TIMEOUT")
-    openai_max_tokens: int = Field(default=1000, env="OPENAI_MAX_TOKENS")
+    # Vision Model Configuration (OpenRouter)
+    vision_model_base_url: str = Field(default="https://openrouter.ai/api/v1", env="VISION_MODEL_BASE_URL")
+    vision_model_api_key: str = Field(..., env="VISION_MODEL_API_KEY")
+    vision_model_name: str = Field(default="openai/gpt-4-vision-preview", env="VISION_MODEL_NAME")
+    vision_model_timeout: int = Field(default=60, env="VISION_MODEL_TIMEOUT")
+    vision_model_max_tokens: int = Field(default=1000, env="VISION_MODEL_MAX_TOKENS")
     
     # Application Security
     api_key: str = Field(..., env="API_KEY")

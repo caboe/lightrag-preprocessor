@@ -25,10 +25,10 @@ class OpenAIService:
     """Service for OpenAI API interactions."""
     
     def __init__(self):
-        """Initialize OpenAI service."""
-        self.api_key = settings.openai_api_key
-        self.model = settings.openai_model
-        self.base_url = "https://api.openai.com/v1"
+        """Initialize Vision Model service (OpenRouter)."""
+        self.api_key = settings.vision_model_api_key
+        self.model = settings.vision_model_name
+        self.base_url = settings.vision_model_base_url
         self._client = None
     
     async def _get_client(self):
