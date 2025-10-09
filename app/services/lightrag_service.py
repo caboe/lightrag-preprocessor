@@ -159,8 +159,7 @@ class LightRAGService:
             
             payload = {
                 "query": query,
-                "max_results": max_results,
-                "model": self.model
+                "max_results": max_results
             }
             
             client = await self._get_client()

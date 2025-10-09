@@ -2,7 +2,7 @@
 Document processing models for the LightRAG Preprocessing API.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, validator
 from .base import SuccessResponse
 
@@ -81,3 +81,34 @@ class YouTubeResponse(SuccessResponse):
     language: str = Field(..., description="Language of the extracted transcript")
     duration: Optional[float] = Field(None, description="Video duration in seconds")
     processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+
+
+class QueryRequest(BaseModel):
+    """Query request model."""
+    query: str = Field(..., min_length=1, max_length=1000, description="Search query")
+    max_results: Optional[int] = Field(default=10, ge=1, le=100, description="Maximum number of results to return")
+    
+    @validator("query")
+    def validate_query(cls, v):
+        """Validate query content."""
+        if not v.strip():
+            raise ValueError("Query cannot be empty")
+        return v.strip()
+
+
+class QueryResult(BaseModel):
+    """Individual query result model."""
+    document_id: str = Field(..., description="Document identifier")
+    title: Optional[str] = Field(None, description="Document title")
+    content: str = Field(..., description="Relevant content snippet")
+    score: Optional[float] = Field(None, description="Relevance score")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class QueryResponse(SuccessResponse):
+    """Query response model."""
+    query: str = Field(..., description="Original search query")
+    results: List[QueryResult] = Field(..., description="List of query results")
+    total_results: int = Field(..., description="Total number of results found")
+    max_results: int = Field(..., description="Maximum results requested")
+    processing_time: Optional[float] = Field(None, description="Query processing time in seconds")

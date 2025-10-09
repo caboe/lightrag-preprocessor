@@ -23,7 +23,9 @@ from app.models.documents import (
     TextInputResponse,
     ImageProcessingResponse,
     YouTubeRequest,
-    YouTubeResponse
+    YouTubeResponse,
+    QueryRequest,
+    QueryResponse
 )
 from app.services.openai_service import openai_service
 from app.services.lightrag_service import lightrag_service
@@ -390,7 +392,7 @@ async def chat_completions(
             # Return streaming response
             async def generate():
                 async for chunk in openai_service.chat_completion_stream(request):
-                    yield f"data: {chunk}\n\n"
+                    yield chunk
                 yield "data: [DONE]\n\n"
             
             return StreamingResponse(
@@ -412,19 +414,42 @@ async def chat_completions(
 
 
 # Query endpoint for LightRAG
-@app.post("/query")
+@app.post("/query", response_model=QueryResponse)
 async def query_knowledge_graph(
-    query: str = Form(...),
-    max_results: int = Form(default=10),
+    request: QueryRequest,
     api_key: str = Depends(verify_api_key)
 ):
     """Query the LightRAG knowledge graph."""
     try:
-        results = await lightrag_service.query(query, max_results)
-        return results
+        start_time = time.time()
+        results = await lightrag_service.query(request.query, request.max_results)
+        processing_time = time.time() - start_time
+        
+        # Ensure results is a list of dictionaries
+        if not isinstance(results, list):
+            results = []
+        
+        # Convert results to QueryResult objects
+        query_results = []
+        for result in results:
+            if isinstance(result, dict):
+                query_results.append({
+                    "document_id": result.get("id", ""),
+                    "title": result.get("title", ""),
+                    "content": result.get("content", ""),
+                    "score": result.get("score", 0.0),
+                    "metadata": result.get("metadata", {})
+                })
+        
+        return QueryResponse(
+            query=request.query,
+            results=query_results,
+            total_results=len(query_results),
+            processing_time=processing_time
+        )
         
     except Exception as e:
-        logger.error("Failed to query knowledge graph", query=query, error=str(e))
+        logger.error("Failed to query knowledge graph", query=request.query, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to query knowledge graph: {str(e)}"
