@@ -2,10 +2,12 @@
 LightRAG Preprocessing API - Main FastAPI Application
 """
 import asyncio
+import json
 import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import List, Optional
+import os
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, status
@@ -16,7 +18,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from config.settings import settings
 from app.models.base import SuccessResponse, ErrorResponse
-from app.models.chat import ChatCompletionRequest, ChatCompletionResponse
+from app.models.chat import (
+    ChatCompletionRequest, 
+    ChatCompletionResponse, 
+    ChatCompletionChoice, 
+    ChatCompletionUsage, 
+    ChatMessage,
+    ChatContent
+)
 from app.models.documents import (
     TextInputRequest, 
     DocumentUploadResponse, 
@@ -116,6 +125,173 @@ def validate_file_size(file_size: int, max_size: int) -> bool:
     return file_size <= max_size
 
 
+async def _process_chat_messages(messages: List[ChatMessage]) -> List[ChatMessage]:
+    """
+    Process chat messages, converting images to text descriptions.
+    
+    Args:
+        messages: List of chat messages
+        
+    Returns:
+        List of processed messages with images converted to text
+    """
+    processed_messages = []
+    
+    for message in messages:
+        if isinstance(message.content, str):
+            # Simple text message
+            processed_messages.append(message)
+        elif isinstance(message.content, list):
+            # Multi-modal message with potential images
+            processed_content = []
+            
+            for content_item in message.content:
+                if content_item.type == "text":
+                    processed_content.append(content_item.text)
+                elif content_item.type == "image_url" and content_item.image_url:
+                    try:
+                        # Download and describe the image
+                        image_url = content_item.image_url.url
+                        
+                        if image_url.startswith("data:image"):
+                            # Base64 encoded image
+                            import base64
+                            header, data = image_url.split(",", 1)
+                            image_data = base64.b64decode(data)
+                            image_format = header.split(";")[0].split("/")[1]
+                        else:
+                            # URL image - download it
+                            import httpx
+                            async with httpx.AsyncClient() as client:
+                                response = await client.get(image_url)
+                                response.raise_for_status()
+                                image_data = response.content
+                                content_type = response.headers.get("content-type", "")
+                                image_format = content_type.split("/")[-1] if "/" in content_type else "jpeg"
+                        
+                        # Generate description using OpenAI service
+                        description = await openai_service.describe_image(image_data, image_format)
+                        processed_content.append(f"[Image description: {description}]")
+                        
+                        logger.info("Processed image in chat message", 
+                                  image_format=image_format, 
+                                  description_length=len(description))
+                        
+                    except Exception as e:
+                        logger.error("Failed to process image in chat message", error=str(e))
+                        processed_content.append("[Image: Unable to process image]")
+            
+            # Create new message with processed content
+            processed_message = ChatMessage(
+                role=message.role,
+                content=" ".join(processed_content),
+                name=message.name
+            )
+            processed_messages.append(processed_message)
+        else:
+            # Fallback for other content types
+            processed_messages.append(message)
+    
+    return processed_messages
+
+
+def _create_search_query(messages: List[ChatMessage]) -> str:
+    """
+    Create a search query from chat messages.
+    
+    Args:
+        messages: List of processed chat messages
+        
+    Returns:
+        Search query string for LightRAG
+    """
+    # Extract context from previous messages
+    context_parts = []
+    current_question = ""
+    
+    for message in messages:
+        content = message.content if isinstance(message.content, str) else str(message.content)
+        
+        if message.role == "system":
+            context_parts.append(f"System: {content}")
+        elif message.role == "user":
+            if len(messages) > 1 and message == messages[-1]:
+                # Last user message is the current question
+                current_question = content
+            else:
+                context_parts.append(f"User: {content}")
+        elif message.role == "assistant":
+            context_parts.append(f"Assistant: {content}")
+    
+    # Build search query
+    if context_parts and current_question:
+        context = " ".join(context_parts[-3:])  # Last 3 context messages
+        search_query = f"Context: {context}. Current question: {current_question}"
+    elif current_question:
+        search_query = current_question
+    else:
+        # Fallback to last message content
+        last_message = messages[-1] if messages else None
+        if last_message:
+            search_query = last_message.content if isinstance(last_message.content, str) else str(last_message.content)
+        else:
+            search_query = "General information request"
+    
+    logger.info("Created search query for LightRAG", 
+               query_length=len(search_query),
+               messages_count=len(messages))
+    
+    return search_query
+
+
+def _format_lightrag_response(lightrag_response: dict) -> str:
+    """
+    Format LightRAG response for chat completion.
+    
+    Args:
+        lightrag_response: Response from LightRAG query
+        
+    Returns:
+        Formatted response content
+    """
+    try:
+        results = lightrag_response.get("results", [])
+        query = lightrag_response.get("query", "")
+        
+        if not results:
+            return "I don't have specific information about that topic in my knowledge base. Could you please provide more details or ask about something else?"
+        
+        # Format the response based on search results
+        response_parts = []
+        
+        # Add a brief introduction
+        response_parts.append("Based on the information in my knowledge base:")
+        response_parts.append("")
+        
+        # Add relevant results
+        for i, result in enumerate(results[:3], 1):  # Limit to top 3 results
+            content = result.get("content", "").strip()
+            if content:
+                response_parts.append(f"{i}. {content}")
+        
+        # Add source information if available
+        if len(results) > 3:
+            response_parts.append("")
+            response_parts.append(f"(Found {len(results)} total relevant sources)")
+        
+        formatted_response = "\n".join(response_parts)
+        
+        logger.info("Formatted LightRAG response", 
+                   results_count=len(results),
+                   response_length=len(formatted_response))
+        
+        return formatted_response
+        
+    except Exception as e:
+        logger.error("Failed to format LightRAG response", error=str(e))
+        return "I encountered an error while processing the information. Please try asking your question again."
+
+
 # Health check endpoints
 @app.get("/health", response_model=SuccessResponse)
 async def health_check():
@@ -175,17 +351,52 @@ async def upload_document(
         file_size = len(content)
         
         # Validate file size
-        if not validate_file_size(file_size, settings.MAX_FILE_SIZE):
+        if not validate_file_size(file_size, settings.max_file_size):
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large. Maximum size: {settings.MAX_FILE_SIZE} bytes"
+                detail=f"File too large. Maximum size: {settings.max_file_size} bytes"
             )
         
         # Extract text content based on file type
-        text_content = content.decode('utf-8')  # Simple text extraction
+        ext = os.path.splitext(file.filename)[1].lower()
+        try:
+            if ext == ".pdf" or (file.content_type and "pdf" in file.content_type.lower()):
+                # Extract text from PDF using PyMuPDF
+                import fitz  # PyMuPDF
+                pdf = fitz.open(stream=content, filetype="pdf")
+                pages_text = []
+                for page in pdf:
+                    pages_text.append(page.get_text())
+                pdf.close()
+                text_content = "\n".join(pages_text).strip()
+            elif ext in (".txt", ".md") or (file.content_type and file.content_type.startswith("text/")):
+                # Decode plain text with fallback
+                try:
+                    text_content = content.decode("utf-8")
+                except UnicodeDecodeError:
+                    text_content = content.decode("latin-1", errors="replace")
+            elif ext == ".docx" or (file.content_type and "word" in (file.content_type.lower())):
+                # DOCX not yet supported without additional dependency
+                raise HTTPException(
+                    status_code=400,
+                    detail="DOCX extraction is not supported yet. Please upload PDF or TXT/MD."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file type for text extraction: {ext or file.content_type}"
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to extract text from document", filename=file.filename, error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to extract text from document: {str(e)}"
+            )
         
         # Index document in LightRAG
-        document_id = await lightrag_service.index_document(
+        track_id = await lightrag_service.index_document(
             content=text_content,
             filename=file.filename,
             file_type=file.content_type or "text/plain"
@@ -195,7 +406,7 @@ async def upload_document(
         
         logger.info(
             "Document uploaded successfully",
-            document_id=document_id,
+            track_id=track_id,
             filename=file.filename,
             file_size=file_size,
             processing_time=processing_time
@@ -203,7 +414,7 @@ async def upload_document(
         
         return DocumentUploadResponse(
             message="Document uploaded and indexed successfully",
-            document_id=document_id,
+            track_id=track_id,
             filename=file.filename,
             file_size=file_size,
             file_type=file.content_type,
@@ -230,7 +441,7 @@ async def process_text(
     
     try:
         # Index text in LightRAG
-        document_id = await lightrag_service.index_text(
+        track_id = await lightrag_service.index_text(
             text=request.text,
             title=request.title
         )
@@ -239,7 +450,7 @@ async def process_text(
         
         logger.info(
             "Text processed successfully",
-            document_id=document_id,
+            track_id=track_id,
             text_length=len(request.text),
             title=request.title,
             processing_time=processing_time
@@ -247,7 +458,7 @@ async def process_text(
         
         return TextInputResponse(
             message="Text processed and indexed successfully",
-            document_id=document_id,
+            track_id=track_id,
             text_length=len(request.text),
             title=request.title,
             processing_time=processing_time
@@ -282,10 +493,10 @@ async def process_image(
         image_size = len(image_data)
         
         # Validate image size
-        if not validate_file_size(image_size, settings.MAX_IMAGE_SIZE):
+        if not validate_file_size(image_size, settings.max_image_size):
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"Image too large. Maximum size: {settings.MAX_IMAGE_SIZE} bytes"
+                detail=f"Image too large. Maximum size: {settings.max_image_size} bytes"
             )
         
         # Get image format
@@ -295,7 +506,7 @@ async def process_image(
         description = await openai_service.describe_image(image_data, image_format)
         
         # Index description in LightRAG
-        document_id = await lightrag_service.index_text(
+        track_id = await lightrag_service.index_text(
             text=f"Image Description: {description}",
             title=f"Image: {file.filename}"
         )
@@ -304,7 +515,7 @@ async def process_image(
         
         logger.info(
             "Image processed successfully",
-            document_id=document_id,
+            track_id=track_id,
             filename=file.filename,
             image_size=image_size,
             description_length=len(description),
@@ -313,7 +524,7 @@ async def process_image(
         
         return ImageProcessingResponse(
             message="Image processed and description indexed successfully",
-            document_id=document_id,
+            track_id=track_id,
             description=description,
             image_size=image_size,
             processing_time=processing_time
@@ -345,7 +556,7 @@ async def process_youtube(
         )
         
         # Index transcript in LightRAG
-        document_id = await lightrag_service.index_text(
+        track_id = await lightrag_service.index_text(
             text=video_data["content"],
             title=f"YouTube: {video_data['metadata']['video_title']}"
         )
@@ -354,7 +565,7 @@ async def process_youtube(
         
         logger.info(
             "YouTube video processed successfully",
-            document_id=document_id,
+            track_id=track_id,
             video_id=video_data["metadata"]["video_id"],
             video_title=video_data["metadata"]["video_title"],
             transcript_length=video_data["metadata"]["transcript_length"],
@@ -363,7 +574,7 @@ async def process_youtube(
         
         return YouTubeResponse(
             message="YouTube video processed and transcript indexed successfully",
-            document_id=document_id,
+            track_id=track_id,
             video_title=video_data["metadata"]["video_title"],
             video_id=video_data["metadata"]["video_id"],
             transcript_length=video_data["metadata"]["transcript_length"],
@@ -386,13 +597,71 @@ async def chat_completions(
     request: ChatCompletionRequest,
     api_key: str = Depends(verify_api_key)
 ):
-    """OpenAI-compatible chat completions endpoint."""
+    """OpenAI-compatible chat completions endpoint using LightRAG."""
     try:
+        # Process messages and handle images
+        processed_messages = await _process_chat_messages(request.messages)
+        
+        # Create search query from conversation context
+        search_query = _create_search_query(processed_messages)
+        
+        # Query LightRAG knowledge graph
+        lightrag_response = await lightrag_service.query(search_query, max_results=5)
+        
+        # Format response as OpenAI chat completion
         if request.stream:
             # Return streaming response
             async def generate():
-                async for chunk in openai_service.chat_completion_stream(request):
-                    yield chunk
+                response_content = _format_lightrag_response(lightrag_response)
+                
+                # Create streaming chunks
+                completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+                created_timestamp = int(time.time())
+                
+                # Send initial chunk
+                chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created_timestamp,
+                    "model": request.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": ""},
+                        "finish_reason": None
+                    }]
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
+                
+                # Send content in chunks
+                words = response_content.split()
+                for i, word in enumerate(words):
+                    chunk = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_timestamp,
+                        "model": request.model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {"content": word + " "},
+                            "finish_reason": None
+                        }]
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    await asyncio.sleep(0.01)  # Small delay for streaming effect
+                
+                # Send final chunk
+                chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created_timestamp,
+                    "model": request.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop"
+                    }]
+                }
+                yield f"data: {json.dumps(chunk)}\n\n"
                 yield "data: [DONE]\n\n"
             
             return StreamingResponse(
@@ -402,7 +671,29 @@ async def chat_completions(
             )
         else:
             # Return regular response
-            response = await openai_service.chat_completion(request)
+            response_content = _format_lightrag_response(lightrag_response)
+            
+            response = ChatCompletionResponse(
+                id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+                object="chat.completion",
+                created=int(time.time()),
+                model=request.model,
+                choices=[
+                    ChatCompletionChoice(
+                        index=0,
+                        message=ChatMessage(
+                            role="assistant",
+                            content=response_content
+                        ),
+                        finish_reason="stop"
+                    )
+                ],
+                usage=ChatCompletionUsage(
+                    prompt_tokens=len(search_query.split()),
+                    completion_tokens=len(response_content.split()),
+                    total_tokens=len(search_query.split()) + len(response_content.split())
+                )
+            )
             return response
             
     except Exception as e:

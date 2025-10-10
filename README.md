@@ -28,7 +28,7 @@ A FastAPI-based preprocessing service for LightRAG knowledge graphs that handles
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd lightrag-preprocessor
+   cd preprocessor
    ```
 
 2. **Install dependencies**
@@ -53,12 +53,12 @@ The API will be available at `http://localhost:8000`
 
 1. **Build the image**
    ```bash
-   docker build -t lightrag-preprocessor .
+   docker build -t preprocessor .
    ```
 
 2. **Run the container**
    ```bash
-   docker run -p 8000:8000 --env-file .env lightrag-preprocessor
+   docker run -p 8000:8000 --env-file .env preprocessor
    ```
 
 ## Configuration
@@ -204,7 +204,7 @@ Authorization: Bearer YOUR_API_KEY
 
 ### Project Structure
 ```
-lightrag-preprocessor/
+preprocessor/
 ├── app/
 │   ├── api/                 # API route handlers
 │   ├── core/               # Core application logic

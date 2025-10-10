@@ -26,10 +26,10 @@ class LightRAGService:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "X-API-Key": self.api_key,
                     "Content-Type": "application/json"
                 },
-                timeout=30.0
+                timeout=settings.lightrag_timeout
             )
         return self._client
     
@@ -42,44 +42,37 @@ class LightRAGService:
             title: Optional title for the document
             
         Returns:
-            Document ID for the indexed content
+            Track ID for the indexing task
             
         Raises:
             Exception: If indexing fails
         """
-        document_id = str(uuid.uuid4())
-        
         try:
-            logger.info("Indexing text content", document_id=document_id, text_length=len(text))
+            logger.info("Indexing text content", text_length=len(text), title=title)
             
             # Prepare the payload for LightRAG
             payload = {
-                "document_id": document_id,
-                "content": text,
-                "metadata": {
-                    "title": title or f"Document {document_id[:8]}",
-                    "type": "text",
-                    "source": "api_upload"
-                }
+                "text": text,
+                "file_source": (title or "text").strip()
             }
             
             client = await self._get_client()
-            response = await client.post("/index", json=payload)
+            response = await client.post("/documents/text", json=payload)
             
             if response.status_code != 200:
                 error_msg = f"LightRAG indexing failed: {response.status_code} - {response.text}"
                 logger.error("LightRAG indexing failed", 
                            status_code=response.status_code, 
-                           error=response.text,
-                           document_id=document_id)
+                           error=response.text)
                 raise Exception(error_msg)
             
-            logger.info("Text content indexed successfully", document_id=document_id)
-            return document_id
+            data = response.json()
+            track_id = data.get("track_id")
+            logger.info("Text content accepted for indexing", track_id=track_id)
+            return track_id
             
         except Exception as e:
             logger.error("Failed to index text content", 
-                        document_id=document_id, 
                         error=str(e))
             raise
     
@@ -93,49 +86,40 @@ class LightRAGService:
             file_type: File type/extension
             
         Returns:
-            Document ID for the indexed content
+            Track ID for the indexing task
             
         Raises:
             Exception: If indexing fails
         """
-        document_id = str(uuid.uuid4())
-        
         try:
             logger.info("Indexing document content", 
-                       document_id=document_id, 
                        filename=filename,
                        file_type=file_type,
                        content_length=len(content))
             
             # Prepare the payload for LightRAG
             payload = {
-                "document_id": document_id,
-                "content": content,
-                "metadata": {
-                    "title": filename,
-                    "type": "document",
-                    "file_type": file_type,
-                    "source": "file_upload"
-                }
+                "text": content,
+                "file_source": filename
             }
             
             client = await self._get_client()
-            response = await client.post("/index", json=payload)
+            response = await client.post("/documents/text", json=payload)
             
             if response.status_code != 200:
                 error_msg = f"LightRAG document indexing failed: {response.status_code} - {response.text}"
                 logger.error("LightRAG document indexing failed", 
                            status_code=response.status_code, 
-                           error=response.text,
-                           document_id=document_id)
+                           error=response.text)
                 raise Exception(error_msg)
             
-            logger.info("Document content indexed successfully", document_id=document_id)
-            return document_id
+            data = response.json()
+            track_id = data.get("track_id")
+            logger.info("Document content accepted for indexing", track_id=track_id)
+            return track_id
             
         except Exception as e:
             logger.error("Failed to index document content", 
-                        document_id=document_id, 
                         filename=filename,
                         error=str(e))
             raise

@@ -22,7 +22,7 @@ class TextInputRequest(BaseModel):
 
 class DocumentUploadResponse(SuccessResponse):
     """Document upload response model."""
-    document_id: str = Field(..., description="Unique identifier for the indexed document")
+    track_id: str = Field(..., description="Tracking ID for background indexing task")
     filename: Optional[str] = Field(None, description="Original filename")
     file_size: Optional[int] = Field(None, description="File size in bytes")
     file_type: Optional[str] = Field(None, description="File type/extension")
@@ -31,7 +31,7 @@ class DocumentUploadResponse(SuccessResponse):
 
 class TextInputResponse(SuccessResponse):
     """Text input response model."""
-    document_id: str = Field(..., description="Unique identifier for the indexed text")
+    track_id: str = Field(..., description="Tracking ID for background indexing task")
     text_length: int = Field(..., description="Length of the processed text")
     title: Optional[str] = Field(None, description="Document title")
     processing_time: Optional[float] = Field(None, description="Processing time in seconds")
@@ -39,7 +39,7 @@ class TextInputResponse(SuccessResponse):
 
 class ImageProcessingResponse(SuccessResponse):
     """Image processing response model."""
-    document_id: str = Field(..., description="Unique identifier for the indexed description")
+    track_id: str = Field(..., description="Tracking ID for background indexing task")
     description: str = Field(..., description="Generated text description of the image")
     image_size: Optional[int] = Field(None, description="Image file size in bytes")
     image_dimensions: Optional[str] = Field(None, description="Image dimensions (width x height)")
@@ -74,7 +74,7 @@ class YouTubeRequest(BaseModel):
 
 class YouTubeResponse(SuccessResponse):
     """YouTube processing response model."""
-    document_id: str = Field(..., description="Unique identifier for the indexed transcript")
+    track_id: str = Field(..., description="Tracking ID for background indexing task")
     video_title: str = Field(..., description="Title of the YouTube video")
     video_id: str = Field(..., description="YouTube video ID")
     transcript_length: int = Field(..., description="Length of the extracted transcript")
