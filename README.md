@@ -76,6 +76,8 @@ The API will be available at `http://localhost:8000`
 | `OPENAI_MODEL` | OpenAI model for vision | `gpt-4-vision-preview` |
 | `API_KEY` | API authentication key | Required |
 | `SECRET_KEY` | Application secret key | Required |
+| `CHAT_API_KEYS` | Comma-separated Bearer tokens for upload endpoint | Optional |
+| `CHAT_API_KEY` | Single Bearer token (alternative to CHAT_API_KEYS) | Optional |
 | `MAX_FILE_SIZE` | Maximum file size (bytes) | `52428800` (50MB) |
 | `MAX_IMAGE_SIZE` | Maximum image size (bytes) | `10485760` (10MB) |
 | `ALLOWED_FILE_TYPES` | Allowed file extensions | `.pdf,.txt,.md,.docx` |
@@ -87,10 +89,8 @@ The API will be available at `http://localhost:8000`
 
 ### Authentication
 
-All endpoints require Bearer token authentication:
-```bash
-Authorization: Bearer YOUR_API_KEY
-```
+- Default: all endpoints require API key via header `X-API-Key: YOUR_API_KEY`.
+- Exception: the Document Upload endpoint (`POST /documents/upload`) also accepts `Authorization: Bearer <CHAT_API_KEY>`, where the token must match one of `CHAT_API_KEYS` or `CHAT_API_KEY` in the environment.
 
 ### Document Processing
 
@@ -100,6 +100,16 @@ POST /documents/upload
 Content-Type: multipart/form-data
 
 file: <document-file>
+```
+
+Authentication options for this endpoint:
+
+```http
+# Option A (recommended):
+X-API-Key: YOUR_API_KEY
+
+# Option B (supported for this endpoint only):
+Authorization: Bearer <token-from-CHAT_API_KEYS-or-CHAT_API_KEY>
 ```
 
 #### Process Text

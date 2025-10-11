@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Application Security
     api_key: str = Field(..., env="API_KEY")
     secret_key: str = Field(..., env="SECRET_KEY")
+    # Chat/Bearer tokens for selective endpoints
+    chat_api_keys: str = Field(default="", env="CHAT_API_KEYS")
+    chat_api_key: Optional[str] = Field(default=None, env="CHAT_API_KEY")
     
     # File Upload Configuration
     max_file_size: int = Field(default=50 * 1024 * 1024)  # 50MB
@@ -109,11 +112,30 @@ class Settings(BaseSettings):
     def cors_allow_headers_list(self) -> List[str]:
         """Get CORS allowed headers as a list."""
         return [item.strip() for item in self.cors_allow_headers.split(",") if item.strip()]
+
+    @property
+    def chat_api_keys_list(self) -> List[str]:
+        """Get chat/bearer API keys as a list, supporting both single and multi env vars."""
+        keys: List[str] = []
+        if self.chat_api_keys:
+            keys.extend([item.strip() for item in self.chat_api_keys.split(",") if item.strip()])
+        if self.chat_api_key:
+            keys.append(self.chat_api_key.strip())
+        # Deduplicate while preserving order
+        seen = set()
+        deduped: List[str] = []
+        for k in keys:
+            if k and k not in seen:
+                seen.add(k)
+                deduped.append(k)
+        return deduped
     
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
-        "case_sensitive": False
+        "case_sensitive": False,
+        # Allow extra environment variables without raising validation errors
+        "extra": "ignore"
     }
 
 

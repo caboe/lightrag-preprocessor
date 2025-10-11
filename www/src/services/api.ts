@@ -36,7 +36,7 @@ export class ApiClient {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'X-API-Key': this.config.apiKey,
           ...options.headers,
         },
       })
@@ -88,7 +88,7 @@ export class ApiClient {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'X-API-Key': this.config.apiKey,
         },
         body: formData,
       })

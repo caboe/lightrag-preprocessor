@@ -10,11 +10,11 @@ from typing import List, Optional
 import os
 import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, status
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, status, Request, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import StreamingResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from config.settings import settings
 from app.models.base import SuccessResponse, ErrorResponse
@@ -62,7 +62,10 @@ structlog.configure(
 logger = structlog.get_logger(__name__)
 
 # Security
-security = HTTPBearer()
+# Switch to X-API-Key header authentication (no Bearer tokens)
+
+# Selective Bearer support for specific endpoints
+bearer_security = HTTPBearer(auto_error=False)
 
 
 @asynccontextmanager
@@ -103,15 +106,40 @@ app.add_middleware(
 
 
 # Authentication dependency
-async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify API key authentication."""
-    if credentials.credentials != settings.api_key:
+async def verify_api_key(x_api_key: str | None = Header(default=None, alias="x-api-key")):
+    """Verify API key via X-API-Key header."""
+    if not x_api_key or x_api_key != settings.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+    return x_api_key
+
+async def verify_upload_auth(
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_security),
+):
+    """Verify auth for document upload: accept X-API-Key or Authorization: Bearer."""
+    # Prefer X-API-Key if provided
+    if x_api_key:
+        if x_api_key == settings.api_key:
+            return x_api_key
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
         )
-    return credentials.credentials
+
+    # Fallback to Bearer token
+    if credentials and (credentials.scheme or "").lower() == "bearer":
+        token = credentials.credentials
+        # Token must match one of the configured chat API keys
+        if token in settings.chat_api_keys_list:
+            return token
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing credentials",
+    )
 
 
 # Utility functions
@@ -333,7 +361,7 @@ async def detailed_health_check(api_key: str = Depends(verify_api_key)):
 @app.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    api_key: str = Depends(verify_api_key)
+    api_key: str = Depends(verify_upload_auth)
 ):
     """Upload and process a document file."""
     start_time = time.time()
