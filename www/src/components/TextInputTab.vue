@@ -202,9 +202,9 @@ import {
   Trash2,
   AlertTriangle
 } from 'lucide-vue-next'
-import { useConfigStore } from '@/stores/config'
-import { getApiClient } from '@/services/api'
-import type { TextInputResponse } from '@/types'
+import { useConfigStore } from '../stores/config'
+import { getApiClient } from '../services/api'
+import type { TextInputResponse } from '../types/index'
 
 const configStore = useConfigStore()
 
@@ -265,9 +265,10 @@ const handleSubmit = async () => {
   try {
     const apiClient = getApiClient(configStore.config)
     
+    const meta = parseMetadata()
     const request = {
-      content: textContent.value.trim(),
-      metadata: parseMetadata()
+      text: textContent.value.trim(),
+      title: meta?.title
     }
 
     const result = await apiClient.processText(request)

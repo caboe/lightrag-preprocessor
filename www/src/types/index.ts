@@ -22,13 +22,19 @@ export interface DocumentUploadResponse {
 }
 
 export interface TextInputRequest {
-  content: string
-  metadata?: Record<string, any>
+  text: string
+  title?: string
 }
 
 export interface TextInputResponse {
   success: boolean
   message: string
+  // Backend fields
+  track_id?: string
+  text_length?: number
+  title?: string
+  processing_time?: number
+  // Legacy/optional
   processed_content?: string
 }
 
