@@ -5,7 +5,8 @@ import type { Config } from '@/types'
 const STORAGE_KEY = 'lightrag-config'
 const DEFAULT_CONFIG: Config = {
   apiUrl: 'http://localhost:8000',
-  apiKey: ''
+  apiKey: '',
+  chatApiKey: ''
 }
 
 // Storage utility functions
@@ -56,7 +57,7 @@ export const useConfigStore = defineStore('config', () => {
     isLoading.value = true
     try {
       const savedConfig = await loadFromStorage()
-      config.value = { ...savedConfig }
+      config.value = { ...DEFAULT_CONFIG, ...savedConfig }
     } catch (error) {
       console.error('Failed to initialize config store:', error)
     } finally {

@@ -2,6 +2,7 @@
 export interface Config {
   apiUrl: string
   apiKey: string
+  chatApiKey?: string
 }
 
 // API Response types

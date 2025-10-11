@@ -66,6 +66,31 @@
         </div>
       </div>
 
+      <!-- Chat API Key (Bearer for chat endpoints) -->
+      <div class="space-y-2">
+        <label for="chatApiKey" class="label">
+          <span>Chat API Key</span>
+          <span class="text-surface-400 text-xs">(used as Bearer for chat)</span>
+        </label>
+        <div class="relative">
+          <input
+            id="chatApiKey"
+            v-model="formData.chatApiKey"
+            :type="showChatApiKey ? 'text' : 'password'"
+            class="input pr-10"
+            placeholder="Optional: separate key for chat endpoints"
+          />
+          <button
+            type="button"
+            @click="showChatApiKey = !showChatApiKey"
+            class="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-surface-200 rounded"
+          >
+            <Eye v-if="!showChatApiKey" class="w-4 h-4" />
+            <EyeOff v-else class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       <!-- Action Buttons -->
       <div class="flex gap-3">
         <button
@@ -136,10 +161,12 @@ const configStore = useConfigStore()
 // Form state
 const formData = ref<Config>({
   apiUrl: '',
-  apiKey: ''
+  apiKey: '',
+  chatApiKey: ''
 })
 
 const showApiKey = ref(false)
+const showChatApiKey = ref(false)
 const isLoading = ref(false)
 const errors = ref<Partial<Record<keyof Config, string>>>({})
 const connectionStatus = ref<'unknown' | 'connected' | 'error'>('unknown')

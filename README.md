@@ -89,8 +89,13 @@ The API will be available at `http://localhost:8000`
 
 ### Authentication
 
-- Default: all endpoints require API key via header `X-API-Key: YOUR_API_KEY`.
-- Exception: the Document Upload endpoint (`POST /documents/upload`) also accepts `Authorization: Bearer <CHAT_API_KEY>`, where the token must match one of `CHAT_API_KEYS` or `CHAT_API_KEY` in the environment.
+- Most endpoints require `X-API-Key: YOUR_API_KEY`.
+- Chat endpoint (`POST /v1/chat/completions`) accepts either:
+  - `X-API-Key: YOUR_API_KEY`, or
+  - `Authorization: Bearer <CHAT_API_KEY>` (must match one of `CHAT_API_KEYS` or `CHAT_API_KEY`).
+- Document Upload endpoint (`POST /documents/upload`) accepts either:
+  - `X-API-Key: YOUR_API_KEY`, or
+  - `Authorization: Bearer <CHAT_API_KEY>` (must match one of `CHAT_API_KEYS` or `CHAT_API_KEY`).
 
 ### Document Processing
 
@@ -148,6 +153,7 @@ Content-Type: application/json
 ```http
 POST /v1/chat/completions
 Content-Type: application/json
+Authorization: Bearer <CHAT_API_KEY>  # or use X-API-Key: YOUR_API_KEY
 
 {
   "model": "lightrag-proxy",

@@ -141,6 +141,31 @@ async def verify_upload_auth(
         detail="Invalid or missing credentials",
     )
 
+async def verify_chat_auth(
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_security),
+):
+    """Verify auth for chat: accept X-API-Key or Authorization: Bearer.
+    - X-API-Key must match `settings.api_key`
+    - Bearer token must match one of `settings.chat_api_keys_list`
+    """
+    if x_api_key:
+        if x_api_key == settings.api_key:
+            return x_api_key
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    if credentials and (credentials.scheme or "").lower() == "bearer":
+        token = credentials.credentials
+        if token in settings.chat_api_keys_list:
+            return token
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing credentials",
+    )
 
 # Utility functions
 def validate_file_type(filename: str, allowed_types: List[str]) -> bool:
@@ -623,7 +648,7 @@ async def process_youtube(
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def chat_completions(
     request: ChatCompletionRequest,
-    api_key: str = Depends(verify_api_key)
+    api_key: str = Depends(verify_chat_auth)
 ):
     """OpenAI-compatible chat completions endpoint using LightRAG."""
     try:

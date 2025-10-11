@@ -187,10 +187,46 @@ export class ApiClient {
 
   // Chat completion endpoint
   async chatCompletion(request: ChatCompletionRequest): Promise<ApiResponse<ChatCompletionResponse>> {
-    return this.fetch<ChatCompletionResponse>('/v1/chat/completions', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    })
+    try {
+      const url = `${this.config.apiUrl.replace(/\/$/, '')}/v1/chat/completions`
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.chatApiKey || this.config.apiKey}`,
+        },
+        body: JSON.stringify({ ...request, stream: false }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMessage = errorJson.detail || errorJson.message || errorMessage
+        } catch {
+          errorMessage = errorText || errorMessage
+        }
+
+        return {
+          success: false,
+          error: errorMessage
+        }
+      }
+
+      const data = await response.json()
+      return {
+        success: true,
+        data
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error'
+      }
+    }
   }
 
   // Streaming chat completion endpoint
@@ -207,7 +243,7 @@ export class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Authorization': `Bearer ${this.config.chatApiKey || this.config.apiKey}`,
         },
         body: JSON.stringify({ ...request, stream: true }),
       })
