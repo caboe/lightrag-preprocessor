@@ -35,6 +35,8 @@ class TextInputResponse(SuccessResponse):
     text_length: int = Field(..., description="Length of the processed text")
     title: Optional[str] = Field(None, description="Document title")
     processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+    pdf_filename: Optional[str] = Field(None, description="Generated PDF filename")
+    pdf_size: Optional[int] = Field(None, description="Generated PDF file size in bytes")
 
 
 class ImageProcessingResponse(SuccessResponse):

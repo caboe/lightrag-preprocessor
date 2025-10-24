@@ -39,6 +39,7 @@ from app.models.documents import (
 from app.services.openai_service import openai_service
 from app.services.lightrag_service import lightrag_service
 from app.services.youtube_service import youtube_service
+from app.services.pdf_service import pdf_service
 
 # Configure structured logging
 structlog.configure(
@@ -489,36 +490,79 @@ async def process_text(
     request: TextInputRequest,
     api_key: str = Depends(verify_api_key)
 ):
-    """Process and index text content."""
+    """Process text content by generating a PDF and indexing it."""
     start_time = time.time()
     
     try:
-        # Index text in LightRAG
-        track_id = await lightrag_service.index_text(
+        # Validate text content
+        if not request.text or not request.text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Text content cannot be empty"
+            )
+        
+        # Generate PDF from text
+        logger.info("Generating PDF from text input", 
+                   text_length=len(request.text), 
+                   title=request.title)
+        
+        pdf_bytes, pdf_filename = await pdf_service.generate_pdf_from_text(
             text=request.text,
-            title=request.title
+            title=request.title,
+            author="LightRAG Preprocessor"
+        )
+        
+        # Validate generated PDF size
+        pdf_size = len(pdf_bytes)
+        if not validate_file_size(pdf_size, settings.max_file_size):
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Generated PDF too large. Maximum size: {settings.max_file_size} bytes"
+            )
+        
+        # Extract text content from the generated PDF for indexing
+        # (We could send the original text, but this ensures consistency with the PDF)
+        import fitz  # PyMuPDF
+        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        pages_text = []
+        for page in pdf_doc:
+            pages_text.append(page.get_text())
+        pdf_doc.close()
+        extracted_text = "\n".join(pages_text).strip()
+        
+        # Index the document in LightRAG using the PDF filename
+        track_id = await lightrag_service.index_document(
+            content=extracted_text,
+            filename=pdf_filename,
+            file_type="application/pdf"
         )
         
         processing_time = time.time() - start_time
         
         logger.info(
-            "Text processed successfully",
+            "Text processed and PDF generated successfully",
             track_id=track_id,
             text_length=len(request.text),
             title=request.title,
+            pdf_filename=pdf_filename,
+            pdf_size=pdf_size,
             processing_time=processing_time
         )
         
         return TextInputResponse(
-            message="Text processed and indexed successfully",
+            message="Text processed, PDF generated, and indexed successfully",
             track_id=track_id,
             text_length=len(request.text),
             title=request.title,
-            processing_time=processing_time
+            processing_time=processing_time,
+            pdf_filename=pdf_filename,
+            pdf_size=pdf_size
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to process text", error=str(e))
+        logger.error("Failed to process text and generate PDF", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process text: {str(e)}"

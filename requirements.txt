@@ -12,6 +12,9 @@ PyMuPDF==1.23.8
 # Image processing
 Pillow==10.1.0
 
+# PDF generation
+reportlab==4.0.7
+
 # YouTube transcript extraction
 youtube-transcript-api==0.6.1
 yt-dlp==2023.11.16

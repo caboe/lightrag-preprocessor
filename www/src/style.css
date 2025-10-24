@@ -5,7 +5,17 @@
 @import '../node_modules/@skeletonlabs/skeleton/dist/themes/catppuccin.css';
 @import '../node_modules/@skeletonlabs/skeleton/dist/index.css';
 
-html, body { @apply h-full overflow-hidden; }
+html, body { 
+  @apply h-full overflow-hidden; 
+  min-height: 800px;
+}
+
+/* Extension popup specific styles */
+body {
+  width: 450px !important;
+  height: 800px !important;
+  min-height: 800px !important;
+}
 
 /* Custom scrollbar styles */
 .scrollbar-thin {
