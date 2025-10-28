@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "build:extension": "BUILD_TARGET=extension vue-tsc -b && vite build",
+    "build:extension": "BUILD_TARGET=extension vue-tsc -b && BUILD_TARGET=extension vite build",
     "build:web": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "package:extension": "npm run build:extension && npm run copy:extension",

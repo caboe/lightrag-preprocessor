@@ -167,7 +167,7 @@ onMounted(async () => {
     <!-- Main Content -->
     <main class="flex-1 overflow-hidden">
       <!-- Tab Content -->
-      <div class="h-full">
+      <div class="h-full overflow-y-auto scrollbar-thin">
         <component
           :is="currentTab?.component"
           :key="activeTab"

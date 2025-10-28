@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 space-y-6">
+  <div class="p-4 space-y-6 h-full overflow-y-auto">
     <!-- Header -->
     <div class="text-center">
       <h2 class="h3 font-bold">API Configuration</h2>

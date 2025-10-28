@@ -6,7 +6,7 @@
 @import '../node_modules/@skeletonlabs/skeleton/dist/index.css';
 
 html, body { 
-  @apply h-full overflow-hidden; 
+  @apply h-full; 
   min-height: 800px;
 }
 
@@ -15,6 +15,7 @@ body {
   width: 450px !important;
   height: 800px !important;
   min-height: 800px !important;
+  overflow: hidden; /* Only hide overflow on body for extension popup */
 }
 
 /* Custom scrollbar styles */

@@ -7,28 +7,31 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 export default defineConfig(() => {
   const isExtension = process.env.BUILD_TARGET === 'extension'
   
+  const plugins = [vue()]
+  
+  if (isExtension) {
+    plugins.push(
+      viteStaticCopy({
+        targets: [
+          {
+            src: 'manifest.json',
+            dest: '.'
+          },
+          {
+            src: 'background.js',
+            dest: '.'
+          },
+          {
+            src: 'public/icons',
+            dest: '.'
+          }
+        ]
+      }) as any
+    )
+  }
+  
   return {
-    plugins: [
-      vue(),
-      ...(isExtension ? [
-        viteStaticCopy({
-          targets: [
-            {
-              src: 'manifest.json',
-              dest: '.'
-            },
-            {
-              src: 'background.js',
-              dest: '.'
-            },
-            {
-              src: 'public/icons',
-              dest: '.'
-            }
-          ]
-        })
-      ] : [])
-    ],
+    plugins,
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src'),
