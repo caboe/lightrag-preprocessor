@@ -104,15 +104,7 @@ class PDFGenerationService:
                 story.append(title_paragraph)
                 story.append(Spacer(1, 12))
             
-            # Add metadata
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            metadata_text = f"Generated on: {current_time}"
-            if author:
-                metadata_text += f" | Author: {author}"
-            
-            metadata_paragraph = Paragraph(metadata_text, self.metadata_style)
-            story.append(metadata_paragraph)
-            story.append(Spacer(1, 20))
+            # Metadata generation removed to keep PDFs clean for LightRAG processing
             
             # Process the text content
             # Split text into paragraphs and handle line breaks

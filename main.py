@@ -422,7 +422,8 @@ async def upload_document(
                 for page in pdf:
                     pages_text.append(page.get_text())
                 pdf.close()
-                text_content = "\n".join(pages_text).strip()
+                extracted_text = "\n".join(pages_text).strip()
+                text_content = extracted_text
             elif ext in (".txt", ".md") or (file.content_type and file.content_type.startswith("text/")):
                 # Decode plain text with fallback
                 try:
