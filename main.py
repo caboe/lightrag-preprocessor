@@ -710,29 +710,14 @@ async def chat_completions(
         if request.stream:
             # Return streaming response
             async def generate():
-                response_content = _format_lightrag_response(lightrag_response)
-                
-                # Create streaming chunks
-                completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
-                created_timestamp = int(time.time())
-                
-                # Send initial chunk
-                chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created_timestamp,
-                    "model": request.model,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"role": "assistant", "content": ""},
-                        "finish_reason": None
-                    }]
-                }
-                yield f"data: {json.dumps(chunk)}\n\n"
-                
-                # Send content in chunks
-                words = response_content.split()
-                for i, word in enumerate(words):
+                try:
+                    response_content = _format_lightrag_response(lightrag_response)
+                    
+                    # Create streaming chunks
+                    completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+                    created_timestamp = int(time.time())
+                    
+                    # Send initial chunk
                     chunk = {
                         "id": completion_id,
                         "object": "chat.completion.chunk",
@@ -740,31 +725,68 @@ async def chat_completions(
                         "model": request.model,
                         "choices": [{
                             "index": 0,
-                            "delta": {"content": word + " "},
+                            "delta": {"role": "assistant", "content": ""},
                             "finish_reason": None
                         }]
                     }
                     yield f"data: {json.dumps(chunk)}\n\n"
-                    await asyncio.sleep(0.01)  # Small delay for streaming effect
-                
-                # Send final chunk
-                chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created_timestamp,
-                    "model": request.model,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": "stop"
-                    }]
-                }
-                yield f"data: {json.dumps(chunk)}\n\n"
-                yield "data: [DONE]\n\n"
+                    
+                    # Send content in chunks
+                    words = response_content.split()
+                    for i, word in enumerate(words):
+                        try:
+                            chunk = {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created_timestamp,
+                                "model": request.model,
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {"content": word + " "},
+                                    "finish_reason": None
+                                }]
+                            }
+                            yield f"data: {json.dumps(chunk)}\n\n"
+                            await asyncio.sleep(0.01)  # Small delay for streaming effect
+                        except Exception as chunk_error:
+                            logger.error("Error sending chunk", chunk_index=i, error=str(chunk_error))
+                            break
+                    
+                    # Send final chunk
+                    chunk = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_timestamp,
+                        "model": request.model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop"
+                        }]
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    
+                except Exception as stream_error:
+                    logger.error("Streaming generation failed", error=str(stream_error))
+                    # Send error chunk
+                    error_chunk = {
+                        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": request.model,
+                        "choices": [{
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "error"
+                        }]
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
             
             return StreamingResponse(
                 generate(),
-                media_type="text/plain",
+                media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
             )
         else:

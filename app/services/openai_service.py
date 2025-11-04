@@ -233,17 +233,34 @@ class OpenAIService:
             
             async with client.stream("POST", "/chat/completions", json=payload) as response:
                 if response.status_code != 200:
+                    # Try to get error details if available
+                    error_details = ""
+                    try:
+                        error_details = await response.aread()
+                        error_details = error_details.decode('utf-8')
+                    except Exception:
+                        pass
+                    
                     error_msg = f"OpenAI streaming chat completion failed: {response.status_code}"
-                    logger.error("OpenAI streaming chat completion failed", 
-                               status_code=response.status_code)
+                    if error_details:
+                        error_msg += f" - {error_details}"
+                    
+                    logger.error("OpenAI streaming chat completion failed",
+                               status_code=response.status_code,
+                               error_details=error_details)
                     raise Exception(error_msg)
                 
+                # Ensure response is properly initialized before streaming
                 async for line in response.aiter_lines():
                     if line.startswith("data: "):
                         data = line[6:]  # Remove "data: " prefix
                         if data.strip() == "[DONE]":
                             break
-                        yield f"data: {data}\n\n"
+                        try:
+                            yield f"data: {data}\n\n"
+                        except Exception as stream_error:
+                            logger.error("Error during streaming", error=str(stream_error))
+                            break
             
             logger.info("Streaming chat completion completed successfully")
             
